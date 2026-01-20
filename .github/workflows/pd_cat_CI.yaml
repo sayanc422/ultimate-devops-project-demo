@@ -1,0 +1,104 @@
+name: product-catalog-ci
+
+on:
+    pull_request:
+        branches:
+        - main
+jobs:
+    build-pd-cat:
+        runs-on: ubuntu-latest
+
+        steps:
+        - name: checkout code
+          uses: actions/checkout@v4
+
+        - name: Setup Go 1.22
+          uses: actions/setup-go@v2
+          with:
+            go-version: 1.22
+
+        - name: Build
+          run: |
+            cd src/product-catalog
+            go mod download
+            go build -o product-catalog-service src/product-catalog/main.go
+
+        - name: unit tests
+          run: |
+            cd src/product-catalog
+            go test ./...
+    code-quality-pd-cat:
+        runs-on: ubuntu-latest
+        steps:
+        - name: checkout code
+          uses: actions/checkout@v4
+        
+        - name: Setup Go 1.22
+          uses: actions/setup-go@v2
+          with:
+             go-version: 1.22
+        
+        - name: Run golangci-lint
+          uses: golangci/golangci-lint-action@v6
+          with:
+            version: v1.55.2
+            run: golangci-lint run
+            working-directory: src/product-catalog
+
+    docker-pd-cat:
+        runs-on: ubuntu-latest
+        needs: build-pd-cat
+
+        steps:
+        - name: checkout code
+          uses: actions/checkout@v4 
+
+        - name: Docker Installation
+          uses: docker/setup-buildx-action@v1
+        - name: Docker Login
+          uses: docker/login-action@v2
+          with:
+            username: ${{ secrets.DOCKER_USERNAME }}
+            password: ${{ secrets.DOCKER_TOKEN }}
+
+        - name: Build and Push Docker Image
+          uses: docker/build-push-action@v6
+          with:
+                context: /src/product-catalog
+                push: true
+                tags: ${{ secrets.DOCKER_USERNAME }}/product-catalog-service:latest:${{ github.run_id }}
+
+    update-k8s-deployment:
+        runs-on: ubuntu-latest
+        needs: docker-pd-cat
+
+        steps:
+        - name: checkout code
+          uses: actions/checkout@v4
+          with: 
+            token: ${{ secrets.GITHUB_TOKEN }}
+            
+            
+        - name: Update tag in kubernetes deployment manifest
+          run: | 
+                sed -i "s|image: .*|image: ${{ secrets.DOCKER_USERNAME }}/product-catalog:${{github.run_id}}|" kubernetes/productcatalog/deploy.yaml
+
+        - name: Git commint and push
+          run: |
+            git config --global user.name "Sayan Chakraborty"
+            git config --global user.email "sayanc422@gmail.com"
+            git add kubernetes/productcatalog/deploy.yaml  
+            git commit -m "Update product-catalog image tag to ${{ github.run_id }}"
+            git push origin HEAD:main -f    
+
+
+       # - name: Configure kubectl
+       #   uses: azure/setup-kubectl@v3
+        #  with:
+         #   version: 'latest'
+
+       # - name: Update K8s Deployment
+        #  run: |
+         #   kubectl set image deployment/product-catalog-deployment product-catalog-container=${{ secrets.DOCKER_USERNAME }}/product-catalog-service:latest:${{ github.run_id }} --record
+          #  kubectl rollout status deployment/product-catalog-deployment
+
