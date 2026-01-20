@@ -88,9 +88,24 @@ jobs:
           run: |
             git config --global user.name "Sayan Chakraborty"
             git config --global user.email "sayanc422@gmail.com"
-            git add kubernetes/productcatalog/deploy.yaml  
-            git commit -m "Update product-catalog image tag to ${{ github.run_id }}"
-            git push origin HEAD:main -f    
+
+            BRANCH=ci/update-product-catalog-${{ github.run_id }}
+            git checkout -b $BRANCH
+
+            git add kubernetes/productcatalog/deploy.yaml
+            git commit -m "[CI]: Update product-catalog image tag to ${{ github.run_id }}"
+
+            git push origin $BRANCH
+            
+          
+          
+          
+          
+          #git config --global user.name "Sayan Chakraborty"
+            #git config --global user.email "sayanc422@gmail.com"
+            #git add kubernetes/productcatalog/deploy.yaml  
+            #git commit -m "Update product-catalog image tag to ${{ github.run_id }}"
+            #git push origin HEAD:main -f    
 
 
        # - name: Configure kubectl
